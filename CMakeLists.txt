@@ -1,5 +1,3 @@
-cmake_minimum_required(VERSION 3.0.2) 
-
 project(execq DESCRIPTION "Threadpool-like implementation that supports task execution in queue-like and stream-like ways.")
 
 option(EXECQ_TESTING_ENABLE "Build execq's unit-tests." OFF)
