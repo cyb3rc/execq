@@ -71,6 +71,7 @@ namespace execq
          * @discussion Be aware that new tasks added after 'cancel' call will not be marked as 'canceled'.
          */
         virtual void cancel() = 0;
+        virtual size_t size() = 0;
         
     private:
         virtual std::future<R> pushImpl(std::unique_ptr<T> object) = 0;

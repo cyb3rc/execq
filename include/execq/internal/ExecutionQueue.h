@@ -53,6 +53,12 @@ namespace execq
             
         public: // IExecutionQueue
             virtual void cancel() final;
+            virtual size_t size() final
+            {
+                std::lock_guard lock(m_taskQueueMutex);
+                return m_taskQueue.size();
+            }
+
             
         private: // IExecutionQueue
             virtual std::future<R> pushImpl(std::unique_ptr<T> object) final;
