@@ -42,10 +42,14 @@ namespace execq
         
         virtual bool notifyOneWorker() = 0;
         virtual void notifyAllWorkers() = 0;
+
+        virtual void setThreadCount(uint32_t threadCount) = 0;
     };
     
     namespace impl
     {
+        using ThreadWorkers = std::vector<std::unique_ptr<IThreadWorker>>;
+
         class ExecutionPool: public IExecutionPool
         {
         public:
@@ -56,18 +60,26 @@ namespace execq
             
             virtual bool notifyOneWorker() final;
             virtual void notifyAllWorkers() final;
-            
+
+            virtual void setThreadCount(uint32_t threadCount) override final;
+
         private:
-            std::atomic_bool m_valid { true };
+            bool shouldWorkerExit();
+            void extractFinishedWorkers(ThreadWorkers& workers);
+
+            std::atomic_uint64_t m_threadCount {0};
+
             TaskProviderList m_providerGroup;
             
-            std::vector<std::unique_ptr<IThreadWorker>> m_workers;
+            mutable std::mutex m_workersMutex;
+            ThreadWorkers m_workers;
+            const IThreadWorkerFactory& m_workerFactory;
         };
         
         
         namespace details
         {
-            bool NotifyWorkers(const std::vector<std::unique_ptr<IThreadWorker>>& workers, const bool single);
+            bool NotifyWorkers(const ThreadWorkers& workers, const bool single);
         }
     }
 }

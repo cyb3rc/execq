@@ -24,11 +24,34 @@
 
 #include "ExecutionPool.h"
 
-execq::impl::ExecutionPool::ExecutionPool(const uint32_t threadCount, const IThreadWorkerFactory& workerFactory)
+namespace
 {
+static constexpr uint64_t packThreadsCount(uint32_t target, uint32_t current)
+{
+    return (uint64_t(target) << 32) | uint64_t(current);
+}
+static constexpr uint32_t unpackTarget(uint64_t threadCount)
+{
+    return uint32_t(threadCount >> 32);
+}
+static constexpr uint32_t unpackCurrent(uint64_t threadCount)
+{
+    return uint32_t(threadCount & 0xFFFFFFFFu);
+}
+}
+
+execq::impl::ExecutionPool::ExecutionPool(const uint32_t threadCount, const IThreadWorkerFactory& workerFactory)
+    : m_workerFactory { workerFactory }
+{
+    m_threadCount.store(packThreadsCount(threadCount, threadCount));
+
+    std::scoped_lock lock(m_workersMutex);
+    m_workers.reserve(threadCount);
+
     for (uint32_t i = 0; i < threadCount; i++)
     {
-        m_workers.emplace_back(workerFactory.createWorker(m_providerGroup));
+        ThreadStopCb cb = [this]() { return this->shouldWorkerExit(); };
+        m_workers.emplace_back(workerFactory.createWorker(m_providerGroup, cb));
     }
 }
 
@@ -44,17 +67,106 @@ void execq::impl::ExecutionPool::removeProvider(ITaskProvider& provider)
 
 bool execq::impl::ExecutionPool::notifyOneWorker()
 {
+    std::lock_guard<std::mutex> lock(m_workersMutex);
     return details::NotifyWorkers(m_workers, true);
 }
 
 void execq::impl::ExecutionPool::notifyAllWorkers()
 {
+    std::lock_guard<std::mutex> lock(m_workersMutex);
     details::NotifyWorkers(m_workers, false);
 }
+void execq::impl::ExecutionPool::setThreadCount(uint32_t threadCount)
+{
+    if (threadCount < 2)
+        return;
+
+    uint32_t toAdd = 0;
+    bool shrinking = false;
+
+    for (;;) {
+        uint64_t tc = m_threadCount.load();
+        uint32_t cur = unpackCurrent(tc);
+
+        if (threadCount > cur) {
+            uint32_t localToAdd = threadCount - cur;
+            uint64_t desired = packThreadsCount(threadCount, threadCount);
+
+            if (m_threadCount.compare_exchange_weak(tc, desired)) {
+                toAdd = localToAdd;
+                shrinking = false;
+                break;
+            }
+        } else {
+            uint64_t desired = packThreadsCount(threadCount, cur);
+
+            if (m_threadCount.compare_exchange_weak(tc, desired)) {
+                toAdd = 0;
+                shrinking = (threadCount < cur);
+                break;
+            }
+        }
+    }
+
+    ThreadWorkers toDestroy;
+
+    {
+        std::scoped_lock lock(m_workersMutex);
+
+        extractFinishedWorkers(toDestroy);
+
+        if (toAdd > 0) {
+            m_workers.reserve(m_workers.size() + toAdd);
+
+            for (uint32_t i = 0; i < toAdd; ++i) {
+                ThreadStopCb cb = [this]() { return this->shouldWorkerExit(); };
+                m_workers.emplace_back(m_workerFactory.createWorker(m_providerGroup, cb));
+            }
+        }
+
+        if (shrinking || toAdd > 0) {
+            details::NotifyWorkers(m_workers, false);
+        }
+    }
+
+    toDestroy.clear();
+}
+
+void execq::impl::ExecutionPool::extractFinishedWorkers(ThreadWorkers& workers)
+{
+    auto it = m_workers.begin();
+    while (it != m_workers.end()) {
+        if ((*it)->finished()) {
+            workers.emplace_back(std::move(*it));
+            it = m_workers.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+bool execq::impl::ExecutionPool::shouldWorkerExit()
+{
+    for (;;)
+    {
+        uint64_t threadsCount = m_threadCount.load();
+        uint32_t target  = unpackTarget(threadsCount);
+        uint32_t current = unpackCurrent(threadsCount);
+
+        if (current <= target)
+            return false;
+
+        uint64_t desired = packThreadsCount(target, current - 1);
+
+        if (m_threadCount.compare_exchange_weak(threadsCount, desired))
+            return true;
+    }
+}
+
 
 // Details
 
-bool execq::impl::details::NotifyWorkers(const std::vector<std::unique_ptr<IThreadWorker>>& workers, const bool single)
+bool execq::impl::details::NotifyWorkers(const ThreadWorkers& workers, const bool single)
 {
     bool notified = false;
     for (const auto& worker : workers)
