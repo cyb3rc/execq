@@ -34,8 +34,8 @@ namespace execq
             explicit ThreadWorker(ITaskProvider& provider, ThreadStopCb cb = nullptr);
             virtual ~ThreadWorker();
             
-            virtual bool notifyWorker() override final;
-            virtual bool finished() override final;
+            virtual bool notifyWorker() final;
+            virtual bool finished() final;
             
         private:
             void threadMain();
@@ -48,9 +48,9 @@ namespace execq
             std::condition_variable m_condition;
             std::mutex m_mutex;
             std::unique_ptr<std::thread> m_thread;
-            ThreadStopCb m_stopCb = nullptr;
             
             ITaskProvider& m_provider;
+            ThreadStopCb m_stopCb = nullptr;
         };
     }
 }
@@ -71,8 +71,8 @@ std::shared_ptr<const execq::impl::IThreadWorkerFactory> execq::impl::IThreadWor
 }
 
 execq::impl::ThreadWorker::ThreadWorker(ITaskProvider& provider, ThreadStopCb cb)
-: m_provider(provider)
-, m_stopCb(cb)
+    : m_provider(provider)
+    , m_stopCb(std::move(cb))
 {}
 
 execq::impl::ThreadWorker::~ThreadWorker()

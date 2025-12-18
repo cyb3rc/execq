@@ -61,7 +61,7 @@ namespace execq
             virtual bool notifyOneWorker() final;
             virtual void notifyAllWorkers() final;
 
-            virtual void setThreadCount(uint32_t threadCount) override final;
+            virtual void setThreadCount(uint32_t threadCount) final;
 
         private:
             bool shouldWorkerExit();

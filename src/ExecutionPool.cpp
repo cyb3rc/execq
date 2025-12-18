@@ -45,7 +45,7 @@ execq::impl::ExecutionPool::ExecutionPool(const uint32_t threadCount, const IThr
 {
     m_threadCount.store(packThreadsCount(threadCount, threadCount));
 
-    std::scoped_lock lock(m_workersMutex);
+    std::lock_guard<std::mutex> lock(m_workersMutex);
     m_workers.reserve(threadCount);
 
     for (uint32_t i = 0; i < threadCount; i++)
@@ -86,11 +86,11 @@ void execq::impl::ExecutionPool::setThreadCount(uint32_t threadCount)
 
     for (;;) {
         uint64_t tc = m_threadCount.load();
-        uint32_t cur = unpackCurrent(tc);
+        auto cur = unpackCurrent(tc);
 
         if (threadCount > cur) {
             uint32_t localToAdd = threadCount - cur;
-            uint64_t desired = packThreadsCount(threadCount, threadCount);
+            auto desired = packThreadsCount(threadCount, threadCount);
 
             if (m_threadCount.compare_exchange_weak(tc, desired)) {
                 toAdd = localToAdd;
@@ -98,7 +98,7 @@ void execq::impl::ExecutionPool::setThreadCount(uint32_t threadCount)
                 break;
             }
         } else {
-            uint64_t desired = packThreadsCount(threadCount, cur);
+            auto desired = packThreadsCount(threadCount, cur);
 
             if (m_threadCount.compare_exchange_weak(tc, desired)) {
                 toAdd = 0;
@@ -111,7 +111,7 @@ void execq::impl::ExecutionPool::setThreadCount(uint32_t threadCount)
     ThreadWorkers toDestroy;
 
     {
-        std::scoped_lock lock(m_workersMutex);
+        std::lock_guard<std::mutex> lock(m_workersMutex);
 
         extractFinishedWorkers(toDestroy);
 
@@ -150,13 +150,13 @@ bool execq::impl::ExecutionPool::shouldWorkerExit()
     for (;;)
     {
         uint64_t threadsCount = m_threadCount.load();
-        uint32_t target  = unpackTarget(threadsCount);
-        uint32_t current = unpackCurrent(threadsCount);
+        auto target  = unpackTarget(threadsCount);
+        auto current = unpackCurrent(threadsCount);
 
         if (current <= target)
             return false;
 
-        uint64_t desired = packThreadsCount(target, current - 1);
+        auto desired = packThreadsCount(target, current - 1);
 
         if (m_threadCount.compare_exchange_weak(threadsCount, desired))
             return true;
