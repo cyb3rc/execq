@@ -35,6 +35,7 @@ namespace execq
     namespace impl
     {
         using Task = std::packaged_task<void()>;
+        using ThreadStopCb = std::function<bool()>;
         class ITaskProvider
         {
         public:
@@ -50,6 +51,7 @@ namespace execq
             virtual ~IThreadWorker() = default;
             
             virtual bool notifyWorker() = 0;
+            virtual bool finished() { return false; }
         };
         
         
@@ -60,7 +62,7 @@ namespace execq
             
             virtual ~IThreadWorkerFactory() = default;
             
-            virtual std::unique_ptr<impl::IThreadWorker> createWorker(impl::ITaskProvider& provider) const = 0;
+            virtual std::unique_ptr<impl::IThreadWorker> createWorker(impl::ITaskProvider& provider, ThreadStopCb cb = nullptr) const = 0;
         };
     }
 }

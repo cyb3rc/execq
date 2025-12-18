@@ -38,13 +38,17 @@ include_directories(execq PRIVATE
 
 
 ### execq unit-tests ###
-
 if (EXECQ_TESTING_ENABLE)
+    if (MSVC)
+        set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+    endif()
+
     set(TEST_SOURCES
         tests/ExecqTestUtil.h
         tests/CancelTokenProviderTest.cpp
         tests/ExecutionStreamTest.cpp
         tests/ExecutionQueueTest.cpp
+        tests/ExecutionPoolTest.cpp
         tests/TaskExecutionQueueTest.cpp
         tests/TaskProviderListTest.cpp
     )

@@ -31,10 +31,11 @@ namespace execq
         class ThreadWorker: public IThreadWorker
         {
         public:
-            explicit ThreadWorker(ITaskProvider& provider);
+            explicit ThreadWorker(ITaskProvider& provider, ThreadStopCb cb = nullptr);
             virtual ~ThreadWorker();
             
             virtual bool notifyWorker() final;
+            virtual bool finished() final;
             
         private:
             void threadMain();
@@ -43,11 +44,13 @@ namespace execq
         private:
             std::atomic_bool m_shouldQuit { false };
             std::atomic_bool m_checkNextTask { false };
+            std::atomic_bool m_finished { false };
             std::condition_variable m_condition;
             std::mutex m_mutex;
             std::unique_ptr<std::thread> m_thread;
             
             ITaskProvider& m_provider;
+            ThreadStopCb m_stopCb = nullptr;
         };
     }
 }
@@ -57,9 +60,9 @@ std::shared_ptr<const execq::impl::IThreadWorkerFactory> execq::impl::IThreadWor
     class ThreadWorkerFactory: public IThreadWorkerFactory
     {
     public:
-        virtual std::unique_ptr<IThreadWorker> createWorker(ITaskProvider& provider) const final
+        virtual std::unique_ptr<IThreadWorker> createWorker(ITaskProvider& provider, ThreadStopCb cb = nullptr) const final
         {
-            return std::unique_ptr<IThreadWorker>(new ThreadWorker(provider));
+            return std::unique_ptr<IThreadWorker>(new ThreadWorker(provider, cb));
         }
     };
     
@@ -67,8 +70,9 @@ std::shared_ptr<const execq::impl::IThreadWorkerFactory> execq::impl::IThreadWor
     return s_factory;
 }
 
-execq::impl::ThreadWorker::ThreadWorker(ITaskProvider& provider)
-: m_provider(provider)
+execq::impl::ThreadWorker::ThreadWorker(ITaskProvider& provider, ThreadStopCb cb)
+    : m_provider(provider)
+    , m_stopCb(std::move(cb))
 {}
 
 execq::impl::ThreadWorker::~ThreadWorker()
@@ -83,7 +87,7 @@ execq::impl::ThreadWorker::~ThreadWorker()
 bool execq::impl::ThreadWorker::notifyWorker()
 {
     std::lock_guard<std::mutex> lock(m_mutex);
-    if (m_checkNextTask)
+    if (m_finished || m_checkNextTask)
     {
         return false;
     }
@@ -97,6 +101,11 @@ bool execq::impl::ThreadWorker::notifyWorker()
     m_condition.notify_one();
     
     return true;
+}
+
+bool execq::impl::ThreadWorker::finished()
+{
+    return m_finished.load();
 }
 
 void execq::impl::ThreadWorker::shutdown()
@@ -114,6 +123,9 @@ void execq::impl::ThreadWorker::threadMain()
         {
             break;
         }
+
+        if (m_stopCb && m_stopCb())
+            break;
         
         m_checkNextTask = false;
         Task task = m_provider.nextTask();
@@ -136,4 +148,6 @@ void execq::impl::ThreadWorker::threadMain()
         
         m_condition.wait(lock);
     }
+
+    m_finished.store(true);
 }

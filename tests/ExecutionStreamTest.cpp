@@ -76,7 +76,7 @@ TEST(ExecutionPool, ExecutionStream_WorkerPool)
     // Strean also creates additional single thread worker for its own needs
     std::unique_ptr<MockThreadWorker> additionalWorkerPtr(new MockThreadWorker{});
     MockThreadWorker& additionalWorker = *additionalWorkerPtr;
-    EXPECT_CALL(workerFactory, createWorker(::testing::_))
+    EXPECT_CALL(workerFactory, createWorker(::testing::_, ::testing::_))
     .WillOnce(::testing::Return(::testing::ByMove(std::move(additionalWorkerPtr))));
     
     

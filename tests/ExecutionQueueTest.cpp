@@ -22,6 +22,8 @@
  * SOFTWARE.
  */
 
+#include <random>
+
 #include "execq.h"
 #include "ExecqTestUtil.h"
 
@@ -72,7 +74,8 @@ TEST(ExecutionPool, ExecutionQueue_MultipleTasks)
 
     for (size_t i = 0; i < count; i++)
     {
-        queue->push(arc4random());
+        static std::mt19937 rng{std::random_device{}()};
+        queue->push(static_cast<uint32_t>(rng()));
     }
 }
 
@@ -114,7 +117,7 @@ TEST(ExecutionPool, ExecutionQueue_ExecutionPool_Concurrent)
     // Queue also creates additional single thread worker for its own needs
     std::unique_ptr<MockThreadWorker> additionalWorkerPtr(new MockThreadWorker{});
     MockThreadWorker& additionalWorker = *additionalWorkerPtr;
-    EXPECT_CALL(workerFactory, createWorker(::testing::_))
+    EXPECT_CALL(workerFactory, createWorker(::testing::_, ::testing::_))
     .WillOnce(::testing::Return(::testing::ByMove(std::move(additionalWorkerPtr))));
     
     
@@ -174,7 +177,7 @@ TEST(ExecutionPool, ExecutionQueue_ExecutionPool_Serial)
     // Queue also creates additional single thread worker for its own needs
     std::unique_ptr<MockThreadWorker> additionalWorkerPtr(new MockThreadWorker{});
     MockThreadWorker& additionalWorker = *additionalWorkerPtr;
-    EXPECT_CALL(workerFactory, createWorker(::testing::_))
+    EXPECT_CALL(workerFactory, createWorker(::testing::_, ::testing::_))
     .WillOnce(::testing::Return(::testing::ByMove(std::move(additionalWorkerPtr))));
     
     
@@ -244,7 +247,7 @@ TEST(ExecutionPool, ExecutionQueue_Cancelability)
     
     // Queue also creates additional single thread worker for its own needs
     std::unique_ptr<MockThreadWorker> additionalWorkerPtr(new MockThreadWorker{});
-    EXPECT_CALL(workerFactory, createWorker(::testing::_))
+    EXPECT_CALL(workerFactory, createWorker(::testing::_, ::testing::_))
     .WillOnce(::testing::Return(::testing::ByMove(std::move(additionalWorkerPtr))));
     
     

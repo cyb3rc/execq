@@ -40,12 +40,14 @@ namespace execq
             
             MOCK_METHOD0(notifyOneWorker, bool());
             MOCK_METHOD0(notifyAllWorkers, void());
+
+            MOCK_METHOD1(setThreadCount, void(uint32_t threadCount));
         };
         
         class MockThreadWorkerFactory: public execq::impl::IThreadWorkerFactory
         {
         public:
-            MOCK_CONST_METHOD1(createWorker, std::unique_ptr<execq::impl::IThreadWorker>(execq::impl::ITaskProvider& provider));
+            MOCK_CONST_METHOD2(createWorker, std::unique_ptr<execq::impl::IThreadWorker>(execq::impl::ITaskProvider& provider, execq::impl::ThreadStopCb cb));
         };
         
         class MockThreadWorker: public execq::impl::IThreadWorker
